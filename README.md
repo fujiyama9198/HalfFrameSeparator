@@ -6,6 +6,8 @@
 1つのフレームに2つの写真が収まったハーフ判の写真を個別の画像に分割するPythonツールです。  
 あなたのOLYMPUS PENやPENTAX 17や他の楽しいハーフ判カメラたちともっと仲良くなれることを期待しています。
 
+![Example of image separation](assets/example.jpg)
+
 ## 依存ライブラリ
 
 - PIL (pillow)
@@ -57,6 +59,8 @@ JPEG, TIFF
 
 This is a Python tool that splits half-frame photos, which contain two pictures in one frame, into individual images.  
 We hope you can enjoy your OLYMPUS PEN, PENTAX 17, and other fun half-frame cameras even more.
+
+![Example of image separation](assets/example.jpg)
 
 ## Dependencies
 
