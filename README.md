@@ -38,6 +38,13 @@ JPEG, TIFF
 - 処理の並列化はそのうち対応します。
 - 一度画像をデコードし、処理を行った後再エンコードするので、画質劣化があるかも……。
 
+### 行っている処理について
+
+画像横幅の中央から±10%の位置にある黒い縦帯を見つけ、その中央で画像を分割します。
+このために、単に指定の閾値以下のピクセル明るさを検出し、フレームの中央にあると仮定される境界を認識しています。
+このとき、ノイズの影響や部分的な欠損があってもできるだけ正確に中心位置を検出できるよう、モルフォロジー（膨張・収縮）という古典的な画像処理手法を使って判定マスクをスムーシングします。
+
+
 ## 生成AIの使用について
 
 コーディング・ドキュメント執筆に部分的にGitHub Copilotを活用しています。
@@ -83,7 +90,13 @@ JPEG, TIFF
 - Parallel processing will be supported in the future.
 - There may be a loss of quality since images are decoded, processed, and then re-encoded.
 
-## Use of Generative AI
+### About the Processing
+
+The tool detects a black vertical band located at ±10% from the center of the image width and splits the image at its center.
+To do this, it simply detects pixel brightness below the specified threshold and recognizes the boundary assumed to be at the center of the frame.
+During this process, it uses morphological operations (dilation and erosion), a classical image processing technique, to smooth the detection mask so that the center position can be detected as accurately as possible, even in the presence of noise and partial defects.
+
+## Declaration of Use of Generative AI
 
 We partially utilize GitHub Copilot for coding and document writing.
 
