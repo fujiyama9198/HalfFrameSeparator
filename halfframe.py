@@ -127,6 +127,7 @@ def main():
     parser.add_argument("--threshold", "-t", type=int, default=64, help="Threshold for inter-frame margin")
     parser.add_argument("--dilation", "-d", type=int, default=7, help="Number of dilation iterations")
     parser.add_argument("--erosion", "-e", type=int, default=14, help="Number of erosion iterations")
+    parser.add_argument("--no-keep-exif", action="store_true", help="Do not keep EXIF data in output images")
 
     args = parser.parse_args()
     path_srcimgs = args.indir
@@ -141,11 +142,18 @@ def main():
             dst1_image, dst2_image = separate_image(src_image, args.threshold, args.dilation, args.erosion)
             dst1_path = path_dstimgs / f"{path.stem}_1{path.suffix}"
             dst2_path = path_dstimgs / f"{path.stem}_2{path.suffix}"
-            dst1_image.save(dst1_path)
-            dst2_image.save(dst2_path)
+            if args.no_keep_exif:
+                dst1_image.save(dst1_path)
+                dst2_image.save(dst2_path)
+            else:
+                dst1_image.save(dst1_path, exif=src_image.info.get("exif"))
+                dst2_image.save(dst2_path, exif=src_image.info.get("exif"))
         except Exception:
             dst_path = path_dstimgs / path.name
-            src_image.save(dst_path)
+            if args.no_keep_exif:
+                src_image.save(dst_path)
+            else:
+                src_image.save(dst_path, exif=src_image.info.get("exif"))
         tqdm.write(f"Processed {path.name}")
 
 
