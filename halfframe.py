@@ -4,6 +4,7 @@ from scipy import ndimage as ndi
 from pathlib import Path
 import argparse
 import itertools
+import multiprocessing
 
 try:
     from tqdm.auto import tqdm
@@ -128,6 +129,36 @@ def separate_image(src_image, threshold, dilation, erosion, crop=None):
     return dst1_image, dst2_image
 
 
+class _HalfFrameFunctor:
+    def __init__(self, threshold, dilation, erosion, crop, path_dstimgs, no_keep_exif):
+        self.threshold = threshold
+        self.dilation = dilation
+        self.erosion = erosion
+        self.crop = crop
+        self.path_dstimgs = path_dstimgs
+        self.no_keep_exif = no_keep_exif
+
+    def __call__(self, path):
+        src_image = Image.open(path)
+        try:
+            dst1_image, dst2_image = separate_image(src_image, self.threshold, self.dilation, self.erosion, crop=self.crop)
+            dst1_path = self.path_dstimgs / f"{path.stem}_1{path.suffix}"
+            dst2_path = self.path_dstimgs / f"{path.stem}_2{path.suffix}"
+            if self.no_keep_exif:
+                dst1_image.save(dst1_path)
+                dst2_image.save(dst2_path)
+            else:
+                dst1_image.save(dst1_path, exif=src_image.info.get("exif"))
+                dst2_image.save(dst2_path, exif=src_image.info.get("exif"))
+        except Exception:
+            dst_path = self.path_dstimgs / path.name
+            if self.no_keep_exif:
+                src_image.save(dst_path)
+            else:
+                src_image.save(dst_path, exif=src_image.info.get("exif"))
+        return path
+
+
 def main():
     parser = argparse.ArgumentParser(description="Half-frame image separator")
     parser.add_argument("indir", type=Path, help="Source image directory")
@@ -137,34 +168,39 @@ def main():
     parser.add_argument("--erosion", "-e", type=int, default=14, help="Number of erosion iterations")
     parser.add_argument("--crop", type=int, help="If specified, crop the detected inter-frame area by <value> so that no blank areas are included")
     parser.add_argument("--no-keep-exif", action="store_true", help="Do not keep EXIF data in output images")
+    parser.add_argument("--num-processes", '-j', type=int, nargs='?', const=-1, default=None, help="Number of processes to use for parallel processing. If only the option without a number is specified, it uses all the available cores.")
 
     args = parser.parse_args()
     path_srcimgs = args.indir
     path_dstimgs = args.outdir if args.outdir else (path_srcimgs.with_name(f"{path_srcimgs.name}_separated"))
     path_dstimgs.mkdir(exist_ok=False, parents=True)
 
+    if args.num_processes is not None and (args.num_processes < -1 or args.num_processes == 0):
+        parser.error("--num-processes must be a positive integer or -1 to use all CPU cores.")
+
     file_ext = ["jpg", "JPG", "jpeg", "JPEG", "tif", "TIF", "tiff", "TIFF"]
     file_list = list(itertools.chain.from_iterable(path_srcimgs.glob("*." + ext) for ext in file_ext))
-    for path in tqdm(file_list):
-        src_image = Image.open(path)
-        try:
-            dst1_image, dst2_image = separate_image(src_image, args.threshold, args.dilation, args.erosion, crop=args.crop)
-            dst1_path = path_dstimgs / f"{path.stem}_1{path.suffix}"
-            dst2_path = path_dstimgs / f"{path.stem}_2{path.suffix}"
-            if args.no_keep_exif:
-                dst1_image.save(dst1_path)
-                dst2_image.save(dst2_path)
-            else:
-                dst1_image.save(dst1_path, exif=src_image.info.get("exif"))
-                dst2_image.save(dst2_path, exif=src_image.info.get("exif"))
-        except Exception:
-            dst_path = path_dstimgs / path.name
-            if args.no_keep_exif:
-                src_image.save(dst_path)
-            else:
-                src_image.save(dst_path, exif=src_image.info.get("exif"))
-        tqdm.write(f"Processed {path.name}")
 
+    _core = _HalfFrameFunctor(
+        threshold=args.threshold,
+        dilation=args.dilation,
+        erosion=args.erosion,
+        crop=args.crop,
+        path_dstimgs=path_dstimgs,
+        no_keep_exif=args.no_keep_exif
+    )
+
+    if args.num_processes is None:
+        for path in tqdm(file_list):
+            _core(path)
+            tqdm.write(f"Processed {path.name}")
+    else:
+        num_processes = args.num_processes
+        if num_processes == -1:
+            num_processes = multiprocessing.cpu_count()
+        with multiprocessing.Pool(num_processes) as pool:
+            for _path in tqdm(pool.imap_unordered(_core, file_list), total=len(file_list)):
+                tqdm.write(f"Processed {_path.name}")
 
 if __name__ == "__main__":
     main()
