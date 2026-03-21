@@ -57,7 +57,7 @@ def detect_black_band(mask1_dilated, ignore_edges=14):
     return mask1_blackband
 
 
-def get_separation_center(mask1_blackband, *, verbose=False):
+def get_separation_center(mask1_blackband, *, verbose=False, left_right=False):
     """Find the center of the black band separation line in the image.
     
     Searches for the longest continuous True region in the central 40-60% 
@@ -93,13 +93,16 @@ def get_separation_center(mask1_blackband, *, verbose=False):
         lengths = ends - starts
         i = lengths.argmax()  # Longest continuous region
         # Center position on original mask1_blackband (float)
-        center_idx = left + (starts[i] + ends[i] - 1) // 2
-        if verbose:
-            print(f"Center of longest True region: {center_idx}")
-    return center_idx
+        if not left_right:
+            center_idx = left + (starts[i] + ends[i] - 1) // 2
+            if verbose:
+                print(f"Center of longest True region: {center_idx}")
+            return center_idx
+        else:
+            return left + starts[i], left + ends[i]
 
 
-def separate_image(src_image, threshold, dilation, erosion):
+def separate_image(src_image, threshold, dilation, erosion, crop=None):
     """Separate a half-frame image into two individual frames.
     
     Args:
@@ -114,9 +117,14 @@ def separate_image(src_image, threshold, dilation, erosion):
     src_arr = np.asarray(src_image)
     mask = get_mask(src_arr, threshold=threshold)
     mask1_dilated = smooth_mask(mask, iterations_dilation=dilation, iterations_erosion=erosion)
-    center_idx = get_separation_center(detect_black_band(mask1_dilated, ignore_edges=erosion))
-    dst1_image = src_image.crop((0, 0, center_idx, src_image.height))
-    dst2_image = src_image.crop((center_idx, 0, src_image.width, src_image.height))
+    if crop is None:
+        center_idx = get_separation_center(detect_black_band(mask1_dilated, ignore_edges=erosion), left_right=False)
+        dst1_image = src_image.crop((0, 0, center_idx, src_image.height))
+        dst2_image = src_image.crop((center_idx, 0, src_image.width, src_image.height))
+    else:
+        left, right = get_separation_center(detect_black_band(mask1_dilated, ignore_edges=erosion), left_right=True)
+        dst1_image = src_image.crop((0, 0, left - crop, src_image.height))
+        dst2_image = src_image.crop((right + crop, 0, src_image.width, src_image.height))
     return dst1_image, dst2_image
 
 
@@ -127,6 +135,7 @@ def main():
     parser.add_argument("--threshold", "-t", type=int, default=64, help="Threshold for inter-frame margin")
     parser.add_argument("--dilation", "-d", type=int, default=7, help="Number of dilation iterations")
     parser.add_argument("--erosion", "-e", type=int, default=14, help="Number of erosion iterations")
+    parser.add_argument("--crop", type=int, help="If specified, crop the detected inter-frame area by <value> so that no blank areas are included")
     parser.add_argument("--no-keep-exif", action="store_true", help="Do not keep EXIF data in output images")
 
     args = parser.parse_args()
@@ -139,7 +148,7 @@ def main():
     for path in tqdm(file_list):
         src_image = Image.open(path)
         try:
-            dst1_image, dst2_image = separate_image(src_image, args.threshold, args.dilation, args.erosion)
+            dst1_image, dst2_image = separate_image(src_image, args.threshold, args.dilation, args.erosion, crop=args.crop)
             dst1_path = path_dstimgs / f"{path.stem}_1{path.suffix}"
             dst2_path = path_dstimgs / f"{path.stem}_2{path.suffix}"
             if args.no_keep_exif:
